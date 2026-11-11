@@ -1,125 +1,178 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
-import { Btn } from '@/components/ui/Btn';
-import { Card } from '@/components/ui/Card';
 import { CalendarWidget } from '@/components/CalendarWidget';
-import { ESTADOS } from '@/constants/estados';
-import { ISO_DATA } from '@/constants/iso14001';
 import { useAppStore } from '@/store/useAppStore';
+import { fmtDate } from '@/lib/utils';
+import { projectEvents } from '@/lib/events';
+import type { Tramite } from '@/types';
+
+const EN_PROCESO = ['recopilando', 'ingresado', 'en_revision'];
+
+/** Botón circular negro con flecha diagonal (esquina de las tarjetas). */
+function ArrowBtn({ to, label }: { to: string; label: string }) {
+  return (
+    <Link to={to} aria-label={label}
+      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-ink text-white hover:bg-black">
+      <Icon n="arrowUR" s={16} w={1.8} />
+    </Link>
+  );
+}
+
+/** Anillo de estados de trámites. */
+function Donut({ tramites }: { tramites: Tramite[] }) {
+  const parts = [
+    { l: 'Cumplidos',   c: '#43846A', v: tramites.filter(t => t.estado === 'cumplido').length },
+    { l: 'En proceso',  c: '#F29A1D', v: tramites.filter(t => EN_PROCESO.includes(t.estado)).length },
+    { l: 'Sin iniciar', c: '#6A5ACD', v: tramites.filter(t => t.estado === 'no_iniciado').length },
+    { l: 'Vencidos',    c: '#D9483B', v: tramites.filter(t => t.estado === 'vencido').length },
+  ].filter(p => p.v > 0 || p.l !== 'Vencidos');
+
+  const total = tramites.length;
+  const R = 62, C = 2 * Math.PI * R;
+  let offset = 0;
+
+  return (
+    <div>
+      <div className="relative mx-auto w-[164px] h-[164px]">
+        <svg viewBox="0 0 164 164" className="w-full h-full -rotate-90">
+          <circle cx="82" cy="82" r={R} fill="none" stroke="#E2DED7" strokeWidth="34" />
+          {total > 0 && parts.map(p => {
+            const len = (p.v / total) * C;
+            const el = (
+              <circle key={p.l} cx="82" cy="82" r={R} fill="none" stroke={p.c} strokeWidth="34"
+                strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-offset} />
+            );
+            offset += len;
+            return el;
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="font-display text-2xl font-bold text-ink">{total}</span>
+          <span className="text-[10px] text-stone-500 -mt-0.5">trámites</span>
+        </div>
+      </div>
+      <ul className="mt-4 flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {parts.map(p => (
+          <li key={p.l} className="flex items-center gap-1.5 text-[12px] font-medium text-ink">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.c }} />
+            {p.l} <span className="text-stone-500 font-normal">{p.v}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate      = useNavigate();
-  const { data, currentUser } = useAppStore();
+  const { data }      = useAppStore();
+  const [q, setQ]     = useState('');
 
-  const proj       = data.proyectos.find(p => p.id === projectId);
-  const clientUser = proj ? data.usuarios.find(u => u.id === proj.cliente_id) : undefined;
-  if (!proj || !clientUser) return null;
+  const proj = data.proyectos.find(p => p.id === projectId);
+  const events = useMemo(() => (proj ? projectEvents(proj) : []), [proj]);
+  if (!proj) return null;
 
+  const base     = `/proyecto/${projectId}`;
   const tramites = proj.tramites ?? [];
-  const alertas  = proj.alertas  ?? [];
-  const unread   = alertas.filter(a => !a.leido).length;
+  const alertas  = (proj.alertas ?? []).slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const shown    = alertas.filter(a => !q || a.mensaje.toLowerCase().includes(q.toLowerCase())).slice(0, 5);
 
   const kpis = [
-    { l: 'Trámites totales', v: tramites.length,                                                         c: '#166534' },
-    { l: 'Cumplidos',        v: tramites.filter(t => t.estado === 'cumplido').length,                    c: '#10B981' },
-    { l: 'En proceso',       v: tramites.filter(t => ['recopilando','ingresado','en_revision'].includes(t.estado)).length, c: '#3B82F6' },
-    { l: 'Vencidos',         v: tramites.filter(t => t.estado === 'vencido').length,                     c: '#DC2626' },
+    { l: 'Trámites totales', v: tramites.length,                                           to: `${base}/tramites` },
+    { l: 'Cumplidos',        v: tramites.filter(t => t.estado === 'cumplido').length,      to: `${base}/tramites?estado=cumplido` },
+    { l: 'En proceso',       v: tramites.filter(t => EN_PROCESO.includes(t.estado)).length, to: `${base}/tramites?estado=proceso` },
   ];
-
-  const isoAll  = Object.values(ISO_DATA).flatMap(s => s.items);
-  const isoDone = Object.values(proj.iso14001?.secciones ?? {}).reduce(
-    (a, s) => a + Object.values(s).filter(Boolean).length, 0,
-  );
-  const isoPct = isoAll.length ? Math.round(isoDone / isoAll.length * 100) : 0;
-
-  const displayUser = currentUser?.rol === 'cliente' ? currentUser : clientUser;
+  const vencidos = tramites.filter(t => t.estado === 'vencido').length;
 
   return (
-    <div className="p-6 fade-in">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Bienvenido, {displayUser.nombre.split(' ')[0]}</h1>
-        <p className="text-sm text-gray-500">{new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4 mb-5">
-        {kpis.map(k => (
-          <Card key={k.l} className="p-4">
-            <p className="text-2xl font-bold" style={{ color: k.c }}>{k.v}</p>
-            <p className="text-xs text-gray-500 mt-1">{k.l}</p>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-3 gap-5">
-        <div className="col-span-2">
-          <CalendarWidget tramites={tramites} alertas={alertas} />
-        </div>
-        <div className="space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-800 text-sm">Alertas recientes</h3>
-              {unread > 0 && <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">{unread} nuevas</span>}
-            </div>
-            {alertas.length === 0
-              ? <p className="text-xs text-gray-400">Sin alertas</p>
-              : alertas.slice(0, 4).map(a => (
-                  <div key={a.id} className={`flex gap-2 p-2 rounded-lg mb-1.5 ${a.leido ? '' : 'bg-amber-50'}`}>
-                    <Icon n="bell" s={13} c={a.leido ? '#9CA3AF' : '#F59E0B'} cls="mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-gray-600 line-clamp-2">{a.mensaje}</p>
-                  </div>
-                ))
-            }
-            {alertas.length > 0 && (
-              <button onClick={() => navigate(`/proyecto/${projectId}/alertas`)} className="text-xs text-green-700 font-medium mt-1 hover:underline">Ver todas →</button>
-            )}
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Icon n="shield" s={15} c="#166534" />
-              <h3 className="font-semibold text-gray-800 text-sm">ISO 14001:2015</h3>
-            </div>
-            <p className="text-3xl font-bold text-green-800 mb-1">{isoPct}%</p>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-2">
-              <div className="h-full rounded-full bg-green-700" style={{ width: `${isoPct}%` }} />
-            </div>
-            <button onClick={() => navigate(`/proyecto/${projectId}/iso14001`)} className="text-xs text-green-700 font-medium hover:underline">Ver checklist →</button>
-          </Card>
-        </div>
-      </div>
-
-      {tramites.length > 0 && (
-        <Card className="p-4 mt-5">
-          <h3 className="font-semibold text-gray-800 mb-3">Matriz de cumplimiento</h3>
-          <div className="space-y-2">
-            {tramites.map(t => {
-              const e = ESTADOS[t.estado] ?? ESTADOS.no_iniciado;
-              return (
-                <div key={t._id} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-700 truncate">{t.nombre}</p>
-                    <p className="text-[10px] text-gray-400">{t.autoridad}</p>
-                  </div>
-                  <div className="w-28"><div className="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${e.pct}%`, background: e.color }} /></div></div>
-                  <span className="text-[10px] font-medium w-20 text-right" style={{ color: e.color }}>{e.label.split(' ')[0]}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
+    <div className="mx-auto max-w-[1200px] px-4 lg:px-6 pt-6 fade-in">
       {!proj.cuestionario?.respondido && (
-        <div className="mt-5 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-green-800 flex items-center justify-center flex-shrink-0"><Icon n="clipboard" s={20} c="white" /></div>
-          <div className="flex-1">
-            <p className="font-semibold text-green-900 text-sm">Inicia el diagnóstico ambiental</p>
-            <p className="text-xs text-green-700">Responde 5 preguntas para identificar las obligaciones aplicables.</p>
-          </div>
-          <Btn onClick={() => navigate(`/proyecto/${projectId}/diagnostico`)}>Iniciar diagnóstico</Btn>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-5 py-4">
+          <p className="flex-1 text-sm text-green-900">
+            <span className="font-semibold">Falta el diagnóstico.</span>{' '}
+            Son cinco preguntas y con ellas armamos la lista de trámites que te aplican.
+          </p>
+          <Link to={`${base}/diagnostico`}
+            className="inline-flex h-10 items-center rounded-md bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">
+            Empezar diagnóstico
+          </Link>
         </div>
       )}
+
+      {/* Indicadores */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
+        {kpis.map(k => (
+          <Link key={k.l} to={k.to}
+            className="flex h-[150px] lg:h-[170px] flex-col justify-between rounded-[22px] border border-stone-400/70 bg-white px-5 py-5 hover:border-ink transition-colors">
+            <span className="font-display text-[34px] font-bold leading-none text-ink">{k.v}</span>
+            <span className="text-[13px] font-semibold text-ink">{k.l}</span>
+          </Link>
+        ))}
+        <div className="flex h-[150px] lg:h-[170px] flex-col justify-between rounded-[22px] bg-lime px-5 py-5">
+          <span className="font-display text-[34px] font-bold leading-none text-ink">{vencidos}</span>
+          <div className="flex items-end justify-between">
+            <span className="text-[13px] font-semibold text-ink">Vencidos</span>
+            <ArrowBtn to={`${base}/tramites?estado=vencido`} label="Ver trámites vencidos" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_266px] gap-8">
+        <div className="lg:pl-4">
+          <CalendarWidget
+            events={events}
+            onOpenAgenda={() => navigate(`${base}/cronograma`)}
+            onOpenTramite={id => navigate(`${base}/tramites/${id}`)}
+          />
+        </div>
+
+        <div className="space-y-2.5 lg:pt-1">
+          {/* Notificaciones */}
+          <section className="rounded-[22px] border border-stone-400/70 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <Icon n="message" s={20} w={1.6} cls="text-ink" />
+              <h2 className="flex-1 font-sans text-[12px] leading-tight text-ink">Notificaciones y Alertas</h2>
+              <ArrowBtn to={`${base}/alertas`} label="Ver todas las alertas" />
+            </div>
+            <label className="mt-4 flex h-[52px] items-center gap-3 rounded-full border border-stone-400/70 px-5">
+              <Icon n="search" s={17} cls="text-ink" />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar mensaje"
+                className="w-full bg-transparent text-[12px] text-ink placeholder:text-ink focus:outline-none" />
+            </label>
+            <ul className="mt-3 min-h-[110px]">
+              {shown.length === 0 ? (
+                <li className="py-6 text-center text-xs text-stone-500">{q ? 'Sin coincidencias.' : 'No tienes avisos.'}</li>
+              ) : shown.map(a => (
+                <li key={a.id} className="border-b border-stone-100 last:border-0">
+                  <Link to={`${base}/alertas`} className="flex gap-2.5 py-2.5">
+                    <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${a.leido ? 'bg-stone-300' : 'bg-red-500'}`} />
+                    <span className="min-w-0">
+                      <span className={`block text-[12px] leading-snug line-clamp-2 ${a.leido ? 'text-stone-500' : 'text-ink'}`}>{a.mensaje}</span>
+                      <span className="block text-[11px] text-stone-400 mt-0.5">{fmtDate(a.fecha)}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Informes */}
+          <section className="rounded-sm bg-sand p-4 pb-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="font-sans text-[15px] font-semibold text-ink">Informes</h2>
+                <p className="text-[13px] text-ink mt-0.5">Estado de trámites</p>
+              </div>
+              <ArrowBtn to={`${base}/tramites`} label="Ver trámites" />
+            </div>
+            <div className="mt-4">
+              <Donut tramites={tramites} />
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@
  *     empresa     VARCHAR(200),
  *     email       VARCHAR(200) UNIQUE NOT NULL,
  *     pwd_hash    VARCHAR(100) NOT NULL,
- *     rol         ENUM('admin','consultor','cliente') NOT NULL,
+ *     rol         ENUM('propietario') NOT NULL DEFAULT 'propietario',
  *     giro        VARCHAR(60),
  *     proyecto_id VARCHAR(36),
  *     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -25,12 +25,10 @@
  *
  *   CREATE TABLE proyectos (
  *     id            VARCHAR(36) PRIMARY KEY,
- *     cliente_id    VARCHAR(36) NOT NULL REFERENCES users(id),
- *     consultor_id  VARCHAR(36) REFERENCES users(id),
+ *     propietario_id VARCHAR(36) NOT NULL REFERENCES users(id),
  *     cuestionario  JSON,
  *     tramites      JSON,
  *     alertas       JSON,
- *     instrucciones JSON,
  *     reuniones     JSON,
  *     iso14001      JSON,
  *     notas         TEXT,
@@ -55,15 +53,15 @@ class ApiService implements IStorageService {
   }
 
   getUserByEmail(_email: string): User | undefined {
-    throw new Error('Not implemented — call GET /users?email=');
+    throw new Error('Not implemented — cada sesión solo ve su propia cuenta (GET /auth/me).');
   }
 
   getUserById(_id: string): User | undefined {
-    throw new Error('Not implemented — call GET /users/:id');
+    throw new Error('Not implemented — cada sesión solo ve su propia cuenta (GET /auth/me).');
   }
 
-  getProjectByClientId(_clientId: string): Proyecto | undefined {
-    throw new Error('Not implemented — call GET /proyectos?cliente_id=');
+  getProjectByOwnerId(_ownerId: string): Proyecto | undefined {
+    throw new Error('Not implemented — call GET /proyectos?propietario_id=');
   }
 
   // ── Async API methods (add these when your backend is ready) ──────────
@@ -80,15 +78,6 @@ class ApiService implements IStorageService {
       body: JSON.stringify({ email, pwd_hash: pwdHash }),
     });
     if (!res.ok) return null;
-    return res.json();
-  }
-
-  async createUser(user: Omit<User, 'id'>): Promise<User> {
-    const res = await fetch(`${BASE_URL}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(user),
-    });
     return res.json();
   }
 

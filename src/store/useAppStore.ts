@@ -5,44 +5,54 @@ import { authService } from '@/services/auth.service';
 import type { AuthUser } from '@/services/auth.service';
 import { uid, today } from '@/lib/utils';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+/**
+ * Modo de autenticación.
+ *  - false (por defecto): cuentas simuladas en localStorage, sin servidor.
+ *  - true: usa la API Express (cookie JWT). Actívalo con VITE_USE_API=true.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const USE_API = (import.meta as any).env?.VITE_USE_API === 'true';
+
+// ── Tipos ──────────────────────────────────────────────────────────────────
+
+export interface AccountFields {
+  nombre: string;
+  empresa: string;
+  giro: string;
+  email: string;
+}
 
 interface AppStore {
   data: AppData;
   currentUser: User | null;
   activeProjectId: string | null;
-  /** true while the initial GET /auth/me is in flight; used by AuthGuard */
+  /** true mientras se restaura la sesión al arrancar; lo usa AuthGuard */
   sessionLoading: boolean;
 
-  // ── Auth (async — proxied through the Express server) ──
-  /** Verify credentials; on success sets currentUser and returns it. */
+  // ── Sesión ──
   login: (email: string, pwd: string) => Promise<User | null>;
-  /** Clear the JWT cookie and reset state. */
   logout: () => Promise<void>;
-  /** Self-registration (cliente role). Creates project in localStorage. */
+  /** Alta de una empresa: crea la cuenta propietaria y su espacio de trabajo. */
   register: (fields: {
     nombre: string; empresa: string; giro: string; email: string; pwd: string;
   }) => Promise<User | null>;
-  /**
-   * Called once on app boot (App.tsx useEffect).
-   * Hits GET /auth/me to restore an existing JWT session.
-   */
   initSession: () => Promise<void>;
 
-  // ── Workspace ──
+  // ── Espacio de trabajo ──
   setActiveProject: (id: string | null) => void;
   updateProject: (partial: Partial<Proyecto>) => void;
 
-  // ── Admin / Consultant ──
-  createClientWithProject: (fields: {
-    nombre: string; empresa: string; giro: string; email: string; pwd: string;
-    consultor_id: string; notas: string;
-  }) => Promise<{ user: User; pwd: string } | null>;
-  createConsultor: (fields: { nombre: string; email: string; pwd: string }) => Promise<User | null>;
-  deleteUser: (userId: string) => Promise<void>;
-  deleteProject: (projectId: string) => void;
-  assignConsultor: (projectId: string, consultorId: string | null) => void;
+  // ── Configuración (control total del propietario) ──
+  /** Devuelve un mensaje de error o null si todo salió bien. */
+  updateAccount: (fields: AccountFields) => Promise<string | null>;
+  changePassword: (current: string, next: string) => Promise<string | null>;
+  /** Borra diagnóstico, trámites, alertas, agenda e ISO; conserva la cuenta. */
+  resetWorkspace: () => void;
+  deleteAccount: (password: string) => Promise<string | null>;
 }
+
+/** En modo local la contraseña vive junto al usuario (solo para la simulación). */
+type LocalUser = User & { _pwd?: string };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -50,33 +60,45 @@ function persist(data: AppData): void {
   storageService.saveData(data);
 }
 
-/** Map the server's SafeUser shape to the frontend User type. */
 function toUser(a: AuthUser): User {
   return {
-    id: a.id,
-    nombre: a.nombre,
-    empresa: a.empresa ?? '',
-    email: a.email,
-    rol: a.rol,
-    giro: a.giro,
-    proyecto_id: a.proyecto_id,
-    // pwd_hash intentionally omitted — server only
+    id: a.id, nombre: a.nombre, empresa: a.empresa ?? '', email: a.email,
+    rol: 'propietario', giro: a.giro, proyecto_id: a.proyecto_id,
   };
 }
 
-/**
- * Upsert a user into the localStorage AppData without touching pwd_hash.
- * Returns the updated AppData.
- */
-function upsertUser(data: AppData, user: User): AppData {
-  const exists = data.usuarios.find(u => u.id === user.id);
+function stripPwd(u: LocalUser): User {
+  const { _pwd: _omit, ...user } = u;
+  return user;
+}
+
+function newWorkspace(id: string, ownerId: string, giro: string): Proyecto {
   return {
-    ...data,
-    usuarios: exists
-      ? data.usuarios.map(u => u.id === user.id ? { ...u, ...user } : u)
-      : [...data.usuarios, user],
+    id, propietario_id: ownerId,
+    cuestionario: {
+      respondido: false,
+      respuestas: { giro, emisiones: null, agua: null, residuos_peligrosos: false, residuos_especiales: false, obras: null },
+      fecha: null,
+    },
+    tramites: [], alertas: [], reuniones: [],
+    iso14001: { secciones: {} },
+    creado: today(), notas: '',
   };
 }
+
+/** Inserta o actualiza la cuenta y garantiza que exista su espacio de trabajo. */
+function upsertAccount(data: AppData, user: User): AppData {
+  const exists = data.usuarios.some(u => u.id === user.id);
+  const usuarios = exists
+    ? data.usuarios.map(u => (u.id === user.id ? { ...u, ...user } : u))
+    : [...data.usuarios, user];
+  const proyectos = data.proyectos.some(p => p.id === user.proyecto_id)
+    ? data.proyectos
+    : [...data.proyectos, newWorkspace(user.proyecto_id, user.id, user.giro ?? '')];
+  return { usuarios, proyectos };
+}
+
+const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 // ── Store ──────────────────────────────────────────────────────────────────
 
@@ -84,149 +106,97 @@ export const useAppStore = create<AppStore>((set, get) => ({
   data: storageService.getData(),
   currentUser: null,
   activeProjectId: null,
-  sessionLoading: true,   // stays true until initSession() resolves
+  sessionLoading: true,
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-
-  // async login(email, pwd) {
-  //   try {
-  //     const authUser = await authService.login(email, pwd);
-  //     const user     = toUser(authUser);
-  //     const updated  = upsertUser(get().data, user);
-  //     persist(updated);
-  //     set({ data: updated, currentUser: user });
-  //     return user;
-  //   } catch {
-  //     return null;
-  //   }
-  // },
+  // ── Sesión ────────────────────────────────────────────────────────────────
 
   async login(email, pwd) {
     try {
-      const { data } = get();
-      const found = data.usuarios.find(u => u.email === email);
-      if (!found || (found as any)._pwd !== pwd) return null;
-      set({ currentUser: found });
-      return found;
+      if (USE_API) {
+        const user = toUser(await authService.login(email, pwd));
+        const updated = upsertAccount(get().data, user);
+        persist(updated);
+        set({ data: updated, currentUser: user });
+        return user;
+      }
+      const found = (get().data.usuarios as LocalUser[]).find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (!found || found._pwd !== pwd) return null;
+      const user = stripPwd(found);
+      set({ currentUser: user });
+      return user;
     } catch {
       return null;
     }
   },
 
-  // async logout() {
-  //   try { await authService.logout(); } catch { /* network errors — still clear state */ }
-  //   set({ currentUser: null, activeProjectId: null });
-  // },
   async logout() {
+    if (USE_API) {
+      try { await authService.logout(); } catch { /* errores de red: igual se limpia el estado */ }
+    }
     set({ currentUser: null, activeProjectId: null });
   },
 
-  // async register({ nombre, empresa, giro, email, pwd }) {
-  //   try {
-  //     const { user: authUser, proyecto_id } = await authService.register({
-  //       nombre, empresa, giro, email, password: pwd,
-  //     });
-  //     const user = toUser(authUser);
-  //     const { data } = get();
-  //     if (data.usuarios.find(u => u.email === email)) return null; // duplicate guard
-  //     const newProj: Proyecto = {
-  //       id: proyecto_id, cliente_id: user.id, consultor_id: null,
-  //       cuestionario: {
-  //         respondido: false,
-  //         respuestas: { giro, emisiones: null, agua: null, residuos_peligrosos: false, residuos_especiales: false, obras: null },
-  //         fecha: null,
-  //       },
-  //       tramites: [], alertas: [], instrucciones_admin: [], reuniones: [],
-  //       iso14001: { secciones: {} },
-  //       creado: today(), notas: '',
-  //     };
-  //     const updated: AppData = {
-  //       usuarios:  [...data.usuarios, user],
-  //       proyectos: [...data.proyectos, newProj],
-  //     };
-  //     persist(updated);
-  //     set({ data: updated, currentUser: user, activeProjectId: proyecto_id });
-  //     return user;
-  //   } catch {
-  //     return null;
-  //   }
-  // },
   async register({ nombre, empresa, giro, email, pwd }) {
     try {
       const { data } = get();
+      if (USE_API) {
+        const { user: authUser } = await authService.register({ nombre, empresa, giro, email, password: pwd });
+        const user = toUser(authUser);
+        const updated = upsertAccount(data, user);
+        persist(updated);
+        set({ data: updated, currentUser: user, activeProjectId: user.proyecto_id });
+        return user;
+      }
 
-      // Duplicado
-      if (data.usuarios.find(u => u.email === email)) return null;
-
-      const proyecto_id = uid();
-      const user: User = {
-        id: uid(),
-        nombre,
-        empresa,
-        email,
-        rol: 'cliente',
-        giro,
-        proyecto_id,
-      };
-
-      const newProj: Proyecto = {
-        id: proyecto_id, cliente_id: user.id, consultor_id: null,
-        cuestionario: {
-          respondido: false,
-          respuestas: { giro, emisiones: null, agua: null, residuos_peligrosos: false, residuos_especiales: false, obras: null },
-          fecha: null,
-        },
-        tramites: [], alertas: [], instrucciones_admin: [], reuniones: [],
-        iso14001: { secciones: {} },
-        creado: today(), notas: '',
-      };
-
+      if (data.usuarios.some(u => u.email.toLowerCase() === email.toLowerCase())) return null;
+      const user: User = { id: uid(), nombre, empresa, email, rol: 'propietario', giro, proyecto_id: uid() };
       const updated: AppData = {
-        usuarios: [...data.usuarios, { ...user, _pwd: pwd } as any], // guarda pwd solo para mock
-        proyectos: [...data.proyectos, newProj],
+        usuarios: [...data.usuarios, { ...user, _pwd: pwd } as LocalUser],
+        proyectos: [...data.proyectos, newWorkspace(user.proyecto_id, user.id, giro)],
       };
       persist(updated);
-      set({ data: updated, currentUser: user, activeProjectId: proyecto_id });
+      set({ data: updated, currentUser: user, activeProjectId: user.proyecto_id });
       return user;
     } catch (err) {
-      console.error('[register mock]', err);
+      console.error('[register]', err);
       return null;
     }
   },
 
-  // async initSession() {
-  //   set({ sessionLoading: true });
-  //   try {
-  //     const authUser = await authService.me();
-  //     if (authUser) {
-  //       const user    = toUser(authUser);
-  //       const updated = upsertUser(get().data, user);
-  //       // Persist only if the user was genuinely new to localStorage
-  //       if (!get().data.usuarios.find(u => u.id === user.id)) persist(updated);
-  //       set({ data: updated, currentUser: user });
-  //     } else {
-  //       set({ currentUser: null });
-  //     }
-  //   } catch {
-  //     set({ currentUser: null });
-  //   } finally {
-  //     set({ sessionLoading: false });
-  //   }
-  // },
   async initSession() {
-    // Sin servidor, no hay sesión persistente entre recargas
-    set({ currentUser: null, sessionLoading: false });
+    if (!USE_API) {
+      // Sin servidor no hay sesión persistente entre recargas
+      set({ currentUser: null, sessionLoading: false });
+      return;
+    }
+    set({ sessionLoading: true });
+    try {
+      const authUser = await authService.me();
+      if (authUser) {
+        const user = toUser(authUser);
+        const updated = upsertAccount(get().data, user);
+        persist(updated);
+        set({ data: updated, currentUser: user });
+      } else {
+        set({ currentUser: null });
+      }
+    } catch {
+      set({ currentUser: null });
+    } finally {
+      set({ sessionLoading: false });
+    }
   },
 
-  // ── Workspace ──────────────────────────────────────────────────────────────
+  // ── Espacio de trabajo ──────────────────────────────────────────────────────
 
   setActiveProject(id) {
     set({ activeProjectId: id });
   },
 
   updateProject(partial) {
-    const { data, activeProjectId } = get();
-    if (!activeProjectId) return;
+    const { data, activeProjectId, currentUser } = get();
+    // Solo se escribe sobre el espacio de la empresa de la sesión
+    if (!activeProjectId || !currentUser || activeProjectId !== currentUser.proyecto_id) return;
     const updated: AppData = {
       ...data,
       proyectos: data.proyectos.map(p =>
@@ -237,96 +207,85 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ data: updated });
   },
 
-  // ── Admin / Consultant ────────────────────────────────────────────────────
+  // ── Configuración ────────────────────────────────────────────────────────────
 
-  async createClientWithProject({ nombre, empresa, giro, email, pwd: rawPwd, consultor_id, notas }) {
-    const finalPwd = rawPwd || Math.random().toString(36).slice(2, 10);
-    try {
-      const proyId = uid();   // pre-generate so we can create the project right after
-      const authUser = await authService.createUser({
-        nombre, empresa, email, password: finalPwd,
-        rol: 'cliente', giro, proyecto_id: proyId,
-      });
-      const user = toUser(authUser);
-      const { data } = get();
-      if (data.usuarios.find(u => u.email === email)) return null;
-      const newProj: Proyecto = {
-        id: user.proyecto_id ?? proyId,
-        cliente_id: user.id,
-        consultor_id: consultor_id || null,
-        cuestionario: {
-          respondido: false,
-          respuestas: { giro, emisiones: null, agua: null, residuos_peligrosos: false, residuos_especiales: false, obras: null },
-          fecha: null,
-        },
-        tramites: [], alertas: [], instrucciones_admin: [], reuniones: [],
-        iso14001: { secciones: {} },
-        creado: today(), notas,
-      };
-      const updated: AppData = {
-        usuarios: [...data.usuarios, user],
-        proyectos: [...data.proyectos, newProj],
-      };
-      persist(updated);
-      set({ data: updated });
-      return { user, pwd: finalPwd };
-    } catch (err) {
-      console.error('[createClientWithProject]', err);
-      return null;
+  async updateAccount(fields) {
+    const { data, currentUser } = get();
+    if (!currentUser) return 'Inicia sesión de nuevo.';
+    const email = fields.email.trim();
+    if (!fields.nombre.trim() || !fields.empresa.trim() || !email) return 'Nombre, empresa y correo son obligatorios.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Revisa el formato del correo.';
+
+    let next: User = { ...currentUser, nombre: fields.nombre.trim(), empresa: fields.empresa.trim(), giro: fields.giro, email };
+    if (USE_API) {
+      try {
+        next = toUser(await authService.updateAccount({ nombre: next.nombre, empresa: next.empresa, giro: next.giro, email }));
+      } catch (e) {
+        return errMsg(e, 'No se pudieron guardar los cambios.');
+      }
+    } else if (data.usuarios.some(u => u.id !== currentUser.id && u.email.toLowerCase() === email.toLowerCase())) {
+      return 'Ese correo ya está en uso por otra cuenta.';
     }
-  },
 
-  async createConsultor({ nombre, email, pwd }) {
-    try {
-      const authUser = await authService.createUser({
-        nombre, empresa: 'BIOIMPACT', email, password: pwd, rol: 'consultor',
-      });
-      const user = toUser(authUser);
-      const updated = upsertUser(get().data, user);
-      persist(updated);
-      set({ data: updated });
-      return user;
-    } catch (err) {
-      console.error('[createConsultor]', err);
-      return null;
-    }
-  },
-
-  async deleteUser(userId) {
-    // Best-effort server deletion (may fail if user was never on server)
-    try { await authService.deleteUser(userId); } catch { /* ignore */ }
-    const { data } = get();
-    const proj = data.proyectos.find(p => p.cliente_id === userId);
-    const updated: AppData = {
-      usuarios: data.usuarios.filter(u => u.id !== userId),
-      proyectos: proj
-        ? data.proyectos.filter(p => p.id !== proj.id)
-        : data.proyectos.map(p => p.consultor_id === userId ? { ...p, consultor_id: null } : p),
-    };
-    persist(updated);
-    set({ data: updated });
-  },
-
-  deleteProject(projectId) {
-    const { data } = get();
-    const proj = data.proyectos.find(p => p.id === projectId);
-    const updated: AppData = {
-      usuarios: proj ? data.usuarios.filter(u => u.id !== proj.cliente_id) : data.usuarios,
-      proyectos: data.proyectos.filter(p => p.id !== projectId),
-    };
-    persist(updated);
-    set({ data: updated });
-  },
-
-  assignConsultor(projectId, consultorId) {
-    const { data } = get();
     const updated: AppData = {
       ...data,
-      proyectos: data.proyectos.map(p =>
-        p.id === projectId ? { ...p, consultor_id: consultorId } : p,
-      ),
+      usuarios: data.usuarios.map(u => (u.id === currentUser.id ? { ...u, ...next } : u)),
+    };
+    persist(updated);
+    set({ data: updated, currentUser: next });
+    return null;
+  },
+
+  async changePassword(current, nextPwd) {
+    const { data, currentUser } = get();
+    if (!currentUser) return 'Inicia sesión de nuevo.';
+    if (nextPwd.length < 6) return 'La nueva contraseña necesita al menos 6 caracteres.';
+    if (USE_API) {
+      try { await authService.changePassword(current, nextPwd); return null; }
+      catch (e) { return errMsg(e, 'No se pudo cambiar la contraseña.'); }
+    }
+    const me = (data.usuarios as LocalUser[]).find(u => u.id === currentUser.id);
+    if (!me || me._pwd !== current) return 'La contraseña actual no coincide.';
+    const updated: AppData = {
+      ...data,
+      usuarios: (data.usuarios as LocalUser[]).map(u => (u.id === me.id ? { ...u, _pwd: nextPwd } : u)),
     };
     persist(updated);
     set({ data: updated });
+    return null;
+  },
+
+  resetWorkspace() {
+    const { data, currentUser } = get();
+    if (!currentUser) return;
+    const updated: AppData = {
+      ...data,
+      proyectos: data.proyectos.map(p => {
+        if (p.id !== currentUser.proyecto_id) return p;
+        const fresh = newWorkspace(p.id, currentUser.id, currentUser.giro ?? '');
+        return { ...fresh, creado: p.creado };
+      }),
+    };
+    persist(updated);
+    set({ data: updated });
+  },
+
+  async deleteAccount(password) {
+    const { data, currentUser } = get();
+    if (!currentUser) return 'Inicia sesión de nuevo.';
+    if (USE_API) {
+      try { await authService.deleteAccount(password); }
+      catch (e) { return errMsg(e, 'No se pudo eliminar la cuenta.'); }
+    } else {
+      const me = (data.usuarios as LocalUser[]).find(u => u.id === currentUser.id);
+      if (!me || me._pwd !== password) return 'Contraseña incorrecta.';
+    }
+    const updated: AppData = {
+      usuarios: data.usuarios.filter(u => u.id !== currentUser.id),
+      proyectos: data.proyectos.filter(p => p.id !== currentUser.proyecto_id),
+    };
+    persist(updated);
+    set({ data: updated, currentUser: null, activeProjectId: null });
+    return null;
   },
 }));

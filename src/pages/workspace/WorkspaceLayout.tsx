@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Outlet, useParams, Navigate } from 'react-router-dom';
-import { Sidebar } from '@/components/Sidebar';
+import { Outlet, useParams, Navigate, useLocation } from 'react-router-dom';
+import { TopNav, type NavItem } from '@/components/TopNav';
+import { UpgradeCard } from '@/components/UpgradeCard';
 import { useAppStore } from '@/store/useAppStore';
 import { today, uid } from '@/lib/utils';
 
@@ -8,8 +9,13 @@ export default function WorkspaceLayout() {
   const { projectId } = useParams<{ projectId: string }>();
   const { data, currentUser, setActiveProject, updateProject } = useAppStore();
 
-  const proj      = data.proyectos.find(p => p.id === projectId);
-  const clientUser = proj ? data.usuarios.find(u => u.id === proj.cliente_id) : undefined;
+  // Aislamiento por empresa: la sesión solo puede abrir su propio espacio
+  const isOwn = !!currentUser && projectId === currentUser.proyecto_id;
+  const proj  = isOwn ? data.proyectos.find(p => p.id === projectId) : undefined;
+
+  // Cada sección nueva arranca desde arriba
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 
   useEffect(() => {
     if (projectId) setActiveProject(projectId);
@@ -44,28 +50,43 @@ export default function WorkspaceLayout() {
   }, [projectId]);
 
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (!proj || !clientUser) return (
-    <div className="flex items-center justify-center h-screen text-gray-400">
-      Proyecto no encontrado.
+  if (!isOwn) return <Navigate to={`/proyecto/${currentUser.proyecto_id}/dashboard`} replace />;
+  if (!proj) return (
+    <div className="flex items-center justify-center h-screen text-stone-500">
+      No encontramos el espacio de trabajo de esta cuenta.
     </div>
   );
 
-  const isConsultor = currentUser.rol === 'consultor' || currentUser.rol === 'admin';
-  const isAdmin     = currentUser.rol === 'admin';
   const unreadCount = (proj.alertas ?? []).filter(a => !a.leido).length;
 
+  const base = `/proyecto/${proj.id}`;
+  const links: NavItem[] = [
+    { label: 'Inicio',      icon: 'home',  to: `${base}/dashboard` },
+    { label: 'ISO 14001',   icon: 'doc',   to: `${base}/iso14001` },
+    { label: 'Diagnóstico', icon: 'bars',  to: `${base}/diagnostico` },
+    { label: 'Trámites',    icon: 'list',  to: `${base}/tramites` },
+    { label: 'Alertas',     icon: 'bell',  to: `${base}/alertas`, badge: unreadCount },
+  ];
+  const menuLinks: NavItem[] = [
+    { label: 'Agenda y cronograma', icon: 'calendar', to: `${base}/cronograma` },
+    { label: 'Configuración',       icon: 'settings', to: `${base}/configuracion` },
+  ];
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        projectId={proj.id}
-        clientUser={clientUser}
-        isConsultor={isConsultor}
-        isAdmin={isAdmin}
-        alertaCount={unreadCount}
+    <div className="flex min-h-screen flex-col bg-white">
+      <TopNav
+        home={`${base}/dashboard`}
+        links={links}
+        menuLinks={menuLinks}
+        calendarTo={`${base}/cronograma`}
+        settingsTo={`${base}/configuracion`}
       />
-      <main className="flex-1 overflow-y-auto bg-gray-50">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-1 lg:px-4 pb-12">
         <Outlet />
       </main>
+      <div className="mx-auto w-full max-w-[1440px] px-6 pb-6">
+        <UpgradeCard />
+      </div>
     </div>
   );
 }

@@ -36,8 +36,9 @@ export function verifyJWT(req: Request, res: Response, next: NextFunction): void
 }
 
 /**
- * Must run after verifyJWT.
- * Passes if `req.user.rol` is in the allowed list; sends 403 otherwise.
+ * Debe ir después de verifyJWT.
+ * Deja pasar si `req.user.rol` está en la lista; responde 403 si no.
+ * Hoy el único rol es 'propietario'; se mantiene genérico para roles futuros.
  */
 export function requireRole(...roles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {

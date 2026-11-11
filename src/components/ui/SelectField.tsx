@@ -10,30 +10,31 @@ interface SelectFieldProps {
   options: (Option | string)[];
   required?: boolean;
   className?: string;
+  placeholder?: string;
 }
 
 export function SelectField({
-  label, value, onChange, options, required = false, className = '',
+  label, value, onChange, options, required = false, className = '', placeholder = 'Seleccionar…',
 }: SelectFieldProps) {
   return (
-    <div className={`flex flex-col gap-1 ${className}`}>
+    <label className={`flex flex-col gap-1.5 ${className}`}>
       {label && (
-        <label className="text-xs font-medium text-gray-600">
-          {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-        </label>
+        <span className="text-[13px] font-medium text-stone-700">
+          {label}{required && <span className="text-red-600 ml-0.5">*</span>}
+        </span>
       )}
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+        className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm text-ink focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
       >
-        <option value="">Seleccionar...</option>
+        <option value="">{placeholder}</option>
         {options.map(o => {
           const val   = typeof o === 'string' ? o : o.value;
-          const label = typeof o === 'string' ? o : o.label;
-          return <option key={val} value={val}>{label}</option>;
+          const lbl   = typeof o === 'string' ? o : o.label;
+          return <option key={val} value={val}>{lbl}</option>;
         })}
       </select>
-    </div>
+    </label>
   );
 }

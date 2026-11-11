@@ -19,6 +19,6 @@ export interface IStorageService {
   getUserByEmail(email: string): User | undefined;
   getUserById(id: string): User | undefined;
 
-  // Projects
-  getProjectByClientId(clientId: string): Proyecto | undefined;
+  // Espacio de trabajo de una empresa
+  getProjectByOwnerId(ownerId: string): Proyecto | undefined;
 }

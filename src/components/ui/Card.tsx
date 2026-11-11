@@ -12,7 +12,7 @@ export function Card({ children, className = '', style, onClick }: CardProps) {
     <div
       onClick={onClick}
       style={style}
-      className={`bg-white rounded-xl shadow-sm border border-gray-100 ${className}`}
+      className={`bg-white rounded-2xl border border-stone-200 ${className}`}
     >
       {children}
     </div>

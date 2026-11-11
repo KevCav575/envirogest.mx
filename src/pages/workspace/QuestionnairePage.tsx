@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Btn } from '@/components/ui/Btn';
-import { Card } from '@/components/ui/Card';
 import { GIROS } from '@/constants/giros';
 import { useAppStore } from '@/store/useAppStore';
 import { generateTramites, today, uid } from '@/lib/utils';
@@ -27,7 +26,7 @@ export default function QuestionnairePage() {
 
   const [step, setStep] = useState(0);
   const [resp, setResp] = useState<CuestionarioRespuestas>({
-    giro: ex.giro ?? '', emisiones: ex.emisiones ?? null, agua: ex.agua ?? null,
+    giro: ex.giro ?? proj?.cuestionario?.respuestas?.giro ?? '', emisiones: ex.emisiones ?? null, agua: ex.agua ?? null,
     residuos_peligrosos: ex.residuos_peligrosos ?? false, residuos_especiales: ex.residuos_especiales ?? false,
     obras: ex.obras ?? null,
   });
@@ -46,80 +45,123 @@ export default function QuestionnairePage() {
 
   if (done) {
     return (
-      <div className="p-6 fade-in max-w-2xl mx-auto">
-        <Card className="p-8 text-center">
-          <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4"><Icon n="checkCircle" s={28} c="#166534" /></div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Diagnóstico completado</h2>
-          <p className="text-gray-500 mb-5">Se identificaron <strong>{proj?.tramites.length ?? 0} trámites ambientales aplicables</strong>.</p>
-          <div className="flex gap-3 justify-center">
-            <Btn onClick={() => navigate(`/proyecto/${projectId}/tramites`)}>Ver trámites</Btn>
-            <Btn variant="secondary" onClick={() => { setDone(false); setStep(0); }}>Repetir diagnóstico</Btn>
-          </div>
-        </Card>
+      <div className="mx-auto max-w-[760px] px-5 pt-16 fade-in">
+        <p className="text-sm font-medium text-green-700">Diagnóstico terminado</p>
+        <h1 className="font-display text-[34px] font-semibold text-ink mt-1">
+          Te aplican {proj?.tramites.length ?? 0} trámites ambientales
+        </h1>
+        <p className="text-stone-600 mt-3 max-w-[560px]">
+          Ya están en tu lista de trámites, ordenados por autoridad. Puedes repetir el diagnóstico
+          si cambió algo en tu operación; la lista se vuelve a generar.
+        </p>
+        <div className="flex flex-wrap gap-3 mt-8">
+          <Btn size="lg" onClick={() => navigate(`/proyecto/${projectId}/tramites`)}>VER TRÁMITES</Btn>
+          <Btn size="lg" variant="secondary" onClick={() => { setDone(false); setStep(0); }}>Repetir diagnóstico</Btn>
+        </div>
       </div>
     );
   }
 
+  const optCls = (on: boolean) =>
+    `flex w-full items-center justify-between gap-4 rounded-lg border-2 px-7 text-left transition-colors ${
+      on ? 'border-green-600 bg-green-50' : 'border-green-600/80 bg-white hover:bg-green-50/50'}`;
+
+  const Check = ({ on }: { on: boolean }) => (
+    <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-green-600 bg-green-600 text-white' : 'border-stone-300'}`}>
+      {on && <Icon n="check" s={14} w={2.5} />}
+    </span>
+  );
+
   return (
-    <div className="p-6 fade-in max-w-2xl mx-auto">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Diagnóstico de Obligaciones Ambientales</h1>
-        <p className="text-sm text-gray-500">5 preguntas estratégicas · LGEEPA, LGPGIR, Ley Ambiental NL</p>
-      </div>
-      <div className="flex gap-1.5 mb-5">
-        {Q_STEPS.map((_, i) => <div key={i} className={`flex-1 h-1.5 rounded-full ${i <= step ? 'bg-green-700' : 'bg-gray-200'}`} />)}
-      </div>
-      <Card className="p-6">
-        <div className="flex items-start gap-3 mb-5">
-          <span className="w-7 h-7 rounded-full bg-green-800 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">{step + 1}</span>
-          <div><h2 className="font-semibold text-gray-800">{cur.titulo}</h2><p className="text-xs text-gray-500 mt-1">{cur.ayuda}</p></div>
+    <div className="mx-auto max-w-[860px] px-5 pt-12 fade-in">
+      {/* Stepper */}
+      <ol className="flex items-center gap-7" aria-label={`Pregunta ${step + 1} de ${Q_STEPS.length}`}>
+        {Q_STEPS.map((_, i) => (
+          <li key={i} className={`flex items-center gap-7 ${i < Q_STEPS.length - 1 ? 'flex-1' : ''}`}>
+            <button
+              onClick={() => i < step && setStep(i)}
+              disabled={i > step}
+              aria-label={`Pregunta ${i + 1}`}
+              className={`flex h-[53px] w-[53px] flex-shrink-0 items-center justify-center rounded-full font-display text-sm font-semibold transition-colors ${
+                i <= step ? 'bg-green-600 text-white' : 'bg-[#EEEEF3] text-stone-400'}`}>
+              {i < step ? <Icon n="check" s={18} w={2.4} /> : null}
+            </button>
+            {i < Q_STEPS.length - 1 && (
+              <span className="relative h-2 flex-1 rounded-full bg-[#EEEEF3] overflow-hidden">
+                <span className="absolute inset-y-0 left-0 rounded-full bg-green-600 transition-all"
+                  style={{ width: i < step ? '100%' : i === step ? '50%' : '0%' }} />
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+
+      <div className="mt-14 px-1 sm:px-7">
+        <h1 className="font-display text-[32px] font-normal text-ink">Pregunta {step + 1}</h1>
+        <p className="mt-3 text-[19px] text-ink max-w-[620px]">{cur.titulo}</p>
+        <p className="mt-1.5 text-sm text-stone-500 max-w-[620px]">{cur.ayuda}</p>
+
+        <div className="mt-10 max-w-[618px]">
+          {cur.tipo === 'select' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {cur.opciones!.map(o => {
+                const on = resp.giro === o.value;
+                return (
+                  <button key={o.value} onClick={() => setResp(r => ({ ...r, giro: o.value }))}
+                    aria-pressed={on} className={`${optCls(on)} min-h-[72px] py-3 !px-5`}>
+                    <span className="text-[16px] text-ink">{o.label}</span>
+                    <Check on={on} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {cur.tipo === 'yesno' && (
+            <div className="space-y-6">
+              {([true, false] as const).map(v => {
+                const on = yesnoValue === v;
+                return (
+                  <button key={String(v)} onClick={() => setResp(r => ({ ...r, [cur.id]: v }))}
+                    aria-pressed={on} className={`${optCls(on)} h-[96px]`}>
+                    <span className="text-[30px] text-ink">{v ? 'Sí' : 'No'}</span>
+                    <Check on={on} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {cur.tipo === 'multicheck' && (
+            <div className="space-y-6">
+              {cur.opciones!.map(o => {
+                const key = o.id as 'residuos_peligrosos' | 'residuos_especiales';
+                const on = !!resp[key];
+                return (
+                  <button key={o.id} onClick={() => setResp(r => ({ ...r, [key]: !r[key] }))}
+                    aria-pressed={on} className={`${optCls(on)} min-h-[96px] py-4`}>
+                    <span className="text-[20px] text-ink">{o.label}</span>
+                    <Check on={on} />
+                  </button>
+                );
+              })}
+              <p className="text-sm text-stone-500">Marca las que apliquen. Si no generas ninguna, solo continúa.</p>
+            </div>
+          )}
         </div>
 
-        {cur.tipo === 'select' && (
-          <div className="grid grid-cols-2 gap-2">
-            {cur.opciones!.map(o => (
-              <button key={o.value} onClick={() => setResp(r => ({ ...r, giro: o.value }))}
-                className={`p-3 rounded-xl border-2 text-sm text-left transition-all ${resp.giro === o.value ? 'border-green-700 bg-green-50 text-green-900 font-medium' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}>
-                {o.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {cur.tipo === 'yesno' && (
-          <div className="flex gap-4">
-            {([true, false] as const).map(v => (
-              <button key={String(v)} onClick={() => setResp(r => ({ ...r, [cur.id]: v }))}
-                className={`flex-1 py-4 rounded-xl border-2 font-semibold text-lg transition-all ${yesnoValue === v ? 'border-green-700 bg-green-50 text-green-900' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                {v ? 'Sí' : 'No'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {cur.tipo === 'multicheck' && (
-          <div className="space-y-3">
-            {cur.opciones!.map(o => {
-              const key = o.id as 'residuos_peligrosos' | 'residuos_especiales';
-              return (
-                <label key={o.id} className="flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer" style={resp[key] ? { borderColor: '#166534', background: '#f0fdf4' } : { borderColor: '#e5e7eb' }}>
-                  <input type="checkbox" checked={!!resp[key]} onChange={e => setResp(r => ({ ...r, [key]: e.target.checked }))} className="w-4 h-4 accent-green-700" />
-                  <span className="text-sm text-gray-700">{o.label}</span>
-                </label>
-              );
-            })}
-            <p className="text-xs text-gray-400">Puedes seleccionar ninguna, una o ambas.</p>
-          </div>
-        )}
-
-        <div className="flex justify-between mt-5 pt-4 border-t border-gray-100">
-          <Btn variant="secondary" onClick={() => setStep(s => s - 1)} disabled={step === 0}><Icon n="cl" s={14} />Anterior</Btn>
+        <div className="mt-14 mb-10 flex max-w-[738px] items-center justify-between">
+          {step > 0 ? (
+            <button onClick={() => setStep(s => s - 1)} className="flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-ink">
+              <Icon n="arrowL" s={15} />Anterior
+            </button>
+          ) : <span />}
           {step < Q_STEPS.length - 1
-            ? <Btn onClick={() => setStep(s => s + 1)} disabled={!canNext}>Siguiente<Icon n="cr" s={14} /></Btn>
-            : <Btn onClick={finish} disabled={!canNext}><Icon n="checkCircle" s={14} />Finalizar</Btn>
+            ? <Btn size="lg" className="min-w-[158px] h-14" onClick={() => setStep(s => s + 1)} disabled={!canNext}>CONTINUAR</Btn>
+            : <Btn size="lg" className="min-w-[158px] h-14" onClick={finish} disabled={!canNext}>TERMINAR</Btn>
           }
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

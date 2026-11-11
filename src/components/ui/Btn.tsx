@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from 'react';
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
+type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline' | 'dark';
 type Size    = 'sm' | 'md' | 'lg';
 
 interface BtnProps {
@@ -15,17 +15,18 @@ interface BtnProps {
 }
 
 const VARIANTS: Record<Variant, string> = {
-  primary:   'bg-green-800 hover:bg-green-900 text-white',
-  secondary: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200',
+  primary:   'bg-green-600 hover:bg-green-700 text-white',
+  secondary: 'bg-white hover:bg-stone-50 text-ink border border-stone-300',
   danger:    'bg-red-600 hover:bg-red-700 text-white',
-  ghost:     'bg-transparent hover:bg-gray-100 text-gray-600',
-  outline:   'bg-transparent border border-green-700 text-green-700 hover:bg-green-50',
+  ghost:     'bg-transparent hover:bg-stone-100 text-stone-600',
+  outline:   'bg-transparent border border-green-600 text-green-700 hover:bg-green-50',
+  dark:      'bg-ink hover:bg-black text-white',
 };
 
 const SIZES: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-5 py-2.5 text-base',
+  sm: 'h-8 px-3 text-xs',
+  md: 'h-10 px-4 text-sm',
+  lg: 'h-12 px-6 text-sm tracking-wide',
 };
 
 export function Btn({
@@ -38,8 +39,8 @@ export function Btn({
       onClick={onClick}
       disabled={disabled}
       style={style}
-      className={`inline-flex items-center gap-2 font-medium rounded-lg transition-all cursor-pointer border-0 outline-none
-        ${VARIANTS[variant]} ${SIZES[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-md transition-colors cursor-pointer
+        ${VARIANTS[variant]} ${SIZES[size]} ${disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''} ${className}`}
     >
       {children}
     </button>

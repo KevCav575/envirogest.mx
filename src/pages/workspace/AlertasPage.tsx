@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Btn } from '@/components/ui/Btn';
 import { useAppStore } from '@/store/useAppStore';
@@ -8,13 +8,14 @@ import type { AlertaTipo } from '@/types';
 
 type Filter = 'todas' | 'no_leidas' | 'leidas';
 
-const TIPO_META: Record<AlertaTipo, { c: string; bg: string; i: string }> = {
-  vencimiento: { c: '#DC2626', bg: '#FEF2F2', i: 'alert' },
-  solicitud:   { c: '#F59E0B', bg: '#FFFBEB', i: 'file' },
-  firma:       { c: '#3B82F6', bg: '#EFF6FF', i: 'edit' },
-  visita:      { c: '#8B5CF6', bg: '#F5F3FF', i: 'calendar' },
-  estado:      { c: '#10B981', bg: '#ECFDF5', i: 'checkCircle' },
-  info:        { c: '#6B7280', bg: '#F9FAFB', i: 'info' },
+const TIPO_META: Record<AlertaTipo, { c: string; bg: string }> = {
+  vencimiento: { c: '#E0315A', bg: '#FDE8EC' },
+  estado:      { c: '#4E8A3A', bg: '#EDF6E7' },
+  info:        { c: '#78716C', bg: '#F5F5F4' },
+};
+
+const TIPO_LABEL: Record<AlertaTipo, string> = {
+  vencimiento: 'Vencimiento', estado: 'Cambio de estado', info: 'Aviso',
 };
 
 export default function AlertasPage() {
@@ -34,66 +35,74 @@ export default function AlertasPage() {
     filter === 'todas' || (filter === 'no_leidas' && !a.leido) || (filter === 'leidas' && a.leido),
   );
 
+  const unread = alertas.filter(a => !a.leido).length;
+  const sorted = filtered.slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
   return (
-    <div className="p-6 fade-in">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Centro de Alertas</h1>
-          <p className="text-sm text-gray-500">{alertas.filter(a => !a.leido).length} sin leer</p>
+    <div className="mx-auto max-w-[1000px] px-4 lg:px-6 pt-14 fade-in">
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-4 px-1 pb-5 border-b border-stone-200">
+        <div className="mr-auto">
+          <h1 className="font-display text-[20px] font-medium text-green-600">Alertas</h1>
+          <p className="text-sm text-stone-500">{unread === 0 ? 'Estás al día.' : `${unread} sin leer`}</p>
         </div>
-        {alertas.some(a => !a.leido) && (
-          <Btn variant="secondary" size="sm" onClick={() => updateProject({ alertas: alertas.map(a => ({ ...a, leido: true })) })}>
-            Marcar todas leídas
+        <div role="radiogroup" aria-label="Filtro" className="flex items-center gap-5 text-[15px]">
+          {([['todas', 'Todas'], ['no_leidas', 'Sin leer'], ['leidas', 'Leídas']] as [Filter, string][]).map(([id, l]) => {
+            const on = filter === id;
+            return (
+              <button key={id} role="radio" aria-checked={on} onClick={() => setFilter(id)}
+                className={`flex items-center gap-1.5 ${on ? 'text-green-600' : 'text-ink hover:text-green-700'}`}>
+                <span className={`h-[9px] w-[9px] rounded-full ${on ? 'bg-green-600' : 'border border-ink'}`} />{l}
+              </button>
+            );
+          })}
+        </div>
+        {unread > 0 && (
+          <Btn variant="secondary" onClick={() => updateProject({ alertas: alertas.map(a => ({ ...a, leido: true })) })}>
+            Marcar todas como leídas
           </Btn>
         )}
       </div>
 
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit mb-5">
-        {([['todas', 'Todas'], ['no_leidas', 'No leídas'], ['leidas', 'Leídas']] as [Filter, string][]).map(([id, l]) => (
-          <button key={id} onClick={() => setFilter(id)}
-            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${filter === id ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}>
-            {l}
-          </button>
-        ))}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-16">
-          <Icon n="bell" s={40} c="#D1D5DB" />
-          <p className="text-gray-400 mt-3">Sin alertas</p>
-        </div>
+      {sorted.length === 0 ? (
+        <p className="py-20 text-center text-stone-500">
+          {filter === 'todas' ? 'No hay alertas en este proyecto.' : 'Nada en esta vista.'}
+        </p>
       ) : (
-        <div className="space-y-2">
-          {filtered.map(a => {
+        <ul>
+          {sorted.map(a => {
             const ti = TIPO_META[a.tipo] ?? TIPO_META.info;
             const tr = tramites.find(t => t._id === a.tramite_id);
             return (
-              <div key={a.id} className={`rounded-xl border p-4 flex gap-4 ${a.leido ? 'bg-white border-gray-100' : 'border-amber-200 bg-amber-50'}`}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: ti.bg }}>
-                  <Icon n={ti.i} s={16} c={ti.c} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${a.leido ? 'text-gray-600' : 'text-gray-800 font-medium'}`}>{a.mensaje}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[10px] text-gray-400">{fmtDate(a.fecha)}</span>
-                    {tr && <span className="text-[10px] text-blue-600 truncate">{tr.nombre}</span>}
-                    {!a.leido && <span className="text-[10px] font-medium text-amber-600">● Nueva</span>}
+              <li key={a.id} className="group flex items-start gap-4 border-b border-stone-200 px-1 py-4">
+                <span className={`mt-2 h-2 w-2 flex-shrink-0 rounded-full ${a.leido ? 'bg-transparent' : 'bg-red-500'}`} aria-label={a.leido ? undefined : 'Sin leer'} />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[14px] leading-relaxed ${a.leido ? 'text-stone-500' : 'text-ink'}`}>{a.mensaje}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-stone-500">
+                    <span className="rounded px-1.5 py-0.5" style={{ color: ti.c, background: ti.bg }}>{TIPO_LABEL[a.tipo] ?? 'Aviso'}</span>
+                    <span>{fmtDate(a.fecha)}</span>
+                    {tr && (
+                      <Link to={`/proyecto/${projectId}/tramites/${tr._id}`} className="truncate text-stone-600 underline-offset-2 hover:underline">
+                        {tr.nombre}
+                      </Link>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 opacity-60 group-hover:opacity-100">
                   {!a.leido && (
-                    <button onClick={() => markRead(a.id)} className="p-1.5 hover:bg-white rounded-lg">
-                      <Icon n="eye" s={14} c="#6B7280" />
+                    <button onClick={() => markRead(a.id)} title="Marcar como leída" aria-label="Marcar como leída"
+                      className="p-1.5 rounded-md text-stone-500 hover:bg-stone-100 hover:text-ink">
+                      <Icon n="check" s={15} />
                     </button>
                   )}
-                  <button onClick={() => delAlerta(a.id)} className="p-1.5 hover:bg-white rounded-lg">
-                    <Icon n="trash" s={14} c="#9CA3AF" />
+                  <button onClick={() => delAlerta(a.id)} title="Eliminar" aria-label="Eliminar alerta"
+                    className="p-1.5 rounded-md text-stone-500 hover:bg-stone-100 hover:text-red-600">
+                    <Icon n="trash" s={15} />
                   </button>
                 </div>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );

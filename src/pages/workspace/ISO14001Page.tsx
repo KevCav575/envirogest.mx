@@ -33,10 +33,10 @@ export default function ISO14001Page() {
   const totalPct = totalItems ? Math.round(totalDone / totalItems * 100) : 0;
 
   return (
-    <div className="p-6 fade-in">
+    <div className="mx-auto max-w-[1100px] px-4 lg:px-6 pt-12 fade-in">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">ISO 14001:2015</h1>
+          <h1 className="font-display text-[22px] font-medium text-green-600">ISO 14001:2015</h1>
           <p className="text-sm text-gray-500">Checklist SGA · Ciclo PHVA (Caps. 4–10)</p>
         </div>
         <div className="text-right">
@@ -50,12 +50,12 @@ export default function ISO14001Page() {
       </div>
 
       {/* Section selector */}
-      <div className="grid grid-cols-7 gap-2 mb-5">
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 mb-5">
         {Object.entries(ISO_DATA).map(([sid]) => {
           const p = secPct(sid);
           return (
             <button key={sid} onClick={() => setOpenSec(sid)}
-              className={`p-3 rounded-xl border-2 text-center transition-all ${openSec === sid ? 'border-green-700 bg-green-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
+              className={`p-3 rounded-lg border-2 text-center transition-all ${openSec === sid ? 'border-green-700 bg-green-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
               <p className="text-lg font-bold" style={{ color: p === 100 ? '#10B981' : p > 50 ? '#3B82F6' : p > 0 ? '#F59E0B' : '#9CA3AF' }}>{p}%</p>
               <p className="text-[10px] text-gray-400 mt-0.5">Cap. {sid}</p>
             </button>
@@ -84,7 +84,7 @@ export default function ISO14001Page() {
               const checked = !!((secs[sid] ?? {})[item.id]);
               return (
                 <label key={item.id}
-                  className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all ${checked ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100'}`}>
+                  className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${checked ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100'}`}>
                   <div onClick={() => toggle(sid, item.id)}
                     className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border-2 ${checked ? 'bg-green-700 border-green-700' : 'border-gray-300'}`}>
                     {checked && <Icon n="check" s={11} c="white" />}

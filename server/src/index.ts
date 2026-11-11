@@ -6,7 +6,7 @@ import rateLimit    from 'express-rate-limit';
 import { config }   from './config';
 import { readStore } from './db/store';
 import authRouter   from './routes/auth';
-import usersRouter  from './routes/users';
+import accountRouter from './routes/account';
 
 const app = express();
 
@@ -38,7 +38,7 @@ const authLimiter = rateLimit({
 
 // ── Routes ────────────────────────────────────────────────────────────────
 app.use('/api/auth',  authLimiter, authRouter);
-app.use('/api/users', usersRouter);
+app.use('/api/account', accountRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
@@ -51,7 +51,7 @@ app.use((_req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────
 async function start() {
-  // Warm up the store — ensures data dir + default admin user exist
+  // Prepara el almacén: crea el archivo si falta y migra datos del modelo anterior
   await readStore();
 
   app.listen(config.port, () => {

@@ -16,9 +16,9 @@ export interface AuthUser {
   nombre:      string;
   empresa:     string;
   email:       string;
-  rol:         'admin' | 'consultor' | 'cliente';
+  rol:         'propietario';
   giro?:       string;
-  proyecto_id?: string;
+  proyecto_id: string;
 }
 
 // ── Low-level fetch helper ─────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export const authService = {
   },
 
   /**
-   * Self-registration (always creates a 'cliente' account).
+   * Alta de una empresa: crea la cuenta propietaria y su espacio de trabajo.
    * Returns the new user and the server-generated proyecto_id.
    */
   async register(fields: {
@@ -83,26 +83,26 @@ export const authService = {
   },
 
   /**
-   * Admin-only: create any user type.
-   */
-  async createUser(fields: {
-    nombre: string; empresa: string; email: string; password: string;
-    rol: string; giro?: string; proyecto_id?: string;
-  }): Promise<AuthUser> {
-    return call<AuthUser>('POST', '/users', fields);
-  },
-
-  /**
-   * Admin-only: remove a user from the auth store.
-   */
-  async deleteUser(id: string): Promise<void> {
-    await call('DELETE', `/users/${id}`);
-  },
-
-  /**
    * Change the authenticated user's own password.
    */
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await call('PATCH', '/auth/password', { currentPassword, newPassword });
+  },
+
+  /**
+   * Actualiza los datos de la cuenta y de la empresa de la sesión.
+   */
+  async updateAccount(fields: {
+    nombre?: string; empresa?: string; giro?: string; email?: string;
+  }): Promise<AuthUser> {
+    const { user } = await call<{ user: AuthUser }>('PATCH', '/account', fields);
+    return user;
+  },
+
+  /**
+   * Elimina la cuenta de la empresa (confirma con la contraseña).
+   */
+  async deleteAccount(password: string): Promise<void> {
+    await call('DELETE', '/account', { password });
   },
 };

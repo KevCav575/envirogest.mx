@@ -1,36 +1,13 @@
 import { Router }              from 'express';
 import type { Request, Response } from 'express';
 import bcrypt                  from 'bcrypt';
-import jwt                     from 'jsonwebtoken';
 import { config }              from '../config';
 import { findByEmail, findById, insertUser, updateUser } from '../db/store';
 import { verifyJWT }           from '../middleware/auth';
 import { uid }                 from '../utils';
-import type { JwtPayload, SafeUser, StoredUser } from '../types';
+import { clearToken, issueToken, toSafe } from '../session';
 
 const router = Router();
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/** Strip pwd_hash + created_at before sending to the client. */
-function toSafe(u: StoredUser): SafeUser {
-  const { id, nombre, empresa, email, rol, giro, proyecto_id } = u;
-  return { id, nombre, empresa, email, rol, giro, proyecto_id };
-}
-
-/** Sign a JWT and set it as an httpOnly cookie on the response. */
-function issueToken(res: Response, payload: JwtPayload): void {
-  const token = jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn as string,
-  });
-  res.cookie(config.cookieName, token, {
-    httpOnly:  true,
-    secure:    config.isProd,      // HTTPS-only in prod; plain HTTP in dev
-    sameSite:  'strict',
-    maxAge:    config.cookieMaxAgeMs,
-    path:      '/',
-  });
-}
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 
@@ -60,7 +37,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    issueToken(res, { sub: user.id, rol: user.rol });
+    issueToken(res, user);
     res.json({ user: toSafe(user) });
   } catch (err) {
     console.error('[POST /auth/login]', err);
@@ -73,7 +50,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
  * Clears the session cookie.
  */
 router.post('/logout', (_req: Request, res: Response): void => {
-  res.clearCookie(config.cookieName, { path: '/' });
+  clearToken(res);
   res.json({ ok: true });
 });
 
@@ -85,7 +62,7 @@ router.get('/me', verifyJWT, async (req: Request, res: Response): Promise<void> 
   try {
     const user = await findById(req.user!.sub);
     if (!user) {
-      res.clearCookie(config.cookieName, { path: '/' });
+      clearToken(res);
       res.status(401).json({ error: 'Usuario no encontrado.' });
       return;
     }
@@ -99,7 +76,7 @@ router.get('/me', verifyJWT, async (req: Request, res: Response): Promise<void> 
 /**
  * POST /api/auth/register
  * Body: { nombre, empresa, giro, email, password }
- * Self-registration — always creates a 'cliente' account.
+ * Alta de una empresa: crea la cuenta propietaria y su espacio de trabajo.
  * Response: { user: SafeUser, proyecto_id: string }
  */
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
@@ -128,10 +105,10 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const proyecto_id = uid();   // let the server own the ID so both sides agree
     const user = await insertUser({
       nombre, empresa, email, pwd_hash,
-      rol: 'cliente', giro, proyecto_id,
+      rol: 'propietario', giro, proyecto_id,
     });
 
-    issueToken(res, { sub: user.id, rol: user.rol });
+    issueToken(res, user);
     res.status(201).json({ user: toSafe(user), proyecto_id });
   } catch (err) {
     console.error('[POST /auth/register]', err);

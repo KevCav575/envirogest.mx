@@ -1,14 +1,21 @@
-export type UserRole = 'admin' | 'consultor' | 'cliente';
+/**
+ * Modelo de autogestión: cada cuenta pertenece a una empresa y su único rol
+ * es `propietario`, con control total sobre su propio espacio de trabajo.
+ * El tipo se deja como unión para poder sumar roles internos más adelante
+ * (p. ej. 'editor' o 'lector') sin tocar la forma del token.
+ */
+export type UserRole = 'propietario';
 
 export interface StoredUser {
   id:          string;
   nombre:      string;
   empresa:     string;
   email:       string;
-  pwd_hash:    string;   // bcrypt hash — NEVER sent to the client
+  pwd_hash:    string;   // hash bcrypt — NUNCA se envía al cliente
   rol:         UserRole;
   giro?:       string;
-  proyecto_id?: string;
+  /** Espacio de trabajo (proyecto) de la empresa. */
+  proyecto_id: string;
   created_at:  string;
 }
 
@@ -17,11 +24,12 @@ export interface UserStore {
 }
 
 export interface JwtPayload {
-  sub: string;     // user id
-  rol: UserRole;
+  sub:         string;     // id del usuario
+  rol:         UserRole;
+  proyecto_id: string;     // espacio de trabajo al que pertenece la sesión
   iat?: number;
   exp?: number;
 }
 
-/** Shape returned to the client — no pwd_hash, no created_at */
+/** Forma que se devuelve al cliente — sin pwd_hash ni created_at */
 export type SafeUser = Omit<StoredUser, 'pwd_hash' | 'created_at'>;

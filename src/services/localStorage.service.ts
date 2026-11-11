@@ -1,66 +1,79 @@
 /**
- * LocalStorageService — browser localStorage implementation of IStorageService.
+ * LocalStorageService — implementación en localStorage de IStorageService.
  *
- * This layer stores PROJECT data (tramites, cuestionario, alertas, etc.) and
- * user DISPLAY data (name, company, role).  Passwords are NOT stored here —
- * authentication is handled server-side (see src/services/auth.service.ts).
+ * Guarda los datos de cada empresa (trámites, diagnóstico, alertas, agenda…)
+ * y los datos visibles de su cuenta propietaria.
  *
- * To migrate to MySQL: implement IStorageService against your REST API and
- * swap the import in src/store/useAppStore.ts.
+ * Para migrar a MySQL: implementa IStorageService contra tu API REST y
+ * cambia el import en src/store/useAppStore.ts.
  */
 import type { AppData, Proyecto, User } from '@/types';
 import type { IStorageService } from './storage.interface';
 import { uid } from '@/lib/utils';
 
 const STORAGE_KEY = 'envirogest_v2';
-const ADMIN_ID    = 'bioimpact_admin_v1';
 
-function buildEmptyData(): AppData {
-  return {
-    usuarios: [
-      {
-        id:      ADMIN_ID,
-        nombre:  'Raúl',
-        empresa: 'BIOIMPACT',
-        email:   'admin@bioimpact.com.mx',
-        // pwd_hash intentionally omitted — bcrypt hash lives on the server
-        rol:     'admin',
-      },
-    ],
-    proyectos: [],
-  };
+function emptyData(): AppData {
+  return { usuarios: [], proyectos: [] };
 }
 
-function ensureAdmin(d: AppData): AppData {
-  if (!d.usuarios)  d.usuarios  = [];
-  if (!d.proyectos) d.proyectos = [];
-  if (!d.usuarios.find(u => u.id === ADMIN_ID)) {
-    d.usuarios.unshift({
-      id:      ADMIN_ID,
-      nombre:  'Raúl',
-      empresa: 'BIOIMPACT',
-      email:   'admin@bioimpact.com.mx',
-      rol:     'admin',
-    });
-  }
-  return d;
+/* Formas que pudo dejar guardadas el modelo anterior (agencia + consultores). */
+type LegacyUser = Omit<User, 'rol' | 'proyecto_id'> & { rol: string; proyecto_id?: string };
+type LegacyProyecto = Omit<Proyecto, 'propietario_id'> & {
+  propietario_id?: string;
+  cliente_id?: string;
+  consultor_id?: string | null;
+  instrucciones_admin?: unknown;
+};
+
+const TIPOS_ALERTA = new Set(['vencimiento', 'estado', 'info']);
+
+/**
+ * Migra datos del modelo de agencia al de autogestión:
+ *  - descarta cuentas 'admin' y 'consultor',
+ *  - convierte 'cliente' en 'propietario',
+ *  - renombra cliente_id → propietario_id y quita consultor_id / instrucciones_admin,
+ *  - convierte alertas enviadas por consultores en avisos genéricos.
+ */
+function migrate(raw: { usuarios?: LegacyUser[]; proyectos?: LegacyProyecto[] }): AppData {
+  const proyectos: Proyecto[] = (raw.proyectos ?? []).map(p => {
+    const { cliente_id, consultor_id: _c, instrucciones_admin: _i, ...rest } = p;
+    return {
+      ...rest,
+      propietario_id: p.propietario_id ?? cliente_id ?? '',
+      reuniones: rest.reuniones ?? [],
+      alertas: (rest.alertas ?? []).map(a => (TIPOS_ALERTA.has(a.tipo) ? a : { ...a, tipo: 'info' as const })),
+    };
+  });
+
+  const usuarios: User[] = (raw.usuarios ?? [])
+    .filter(u => u.rol !== 'admin' && u.rol !== 'consultor')
+    .map(u => ({
+      ...u,
+      rol: 'propietario' as const,
+      proyecto_id: u.proyecto_id ?? proyectos.find(p => p.propietario_id === u.id)?.id ?? uid(),
+    }));
+
+  return { usuarios, proyectos };
 }
 
 class LocalStorageService implements IStorageService {
   getData(): AppData {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return buildEmptyData();
-      return ensureAdmin(JSON.parse(raw) as AppData);
+      if (!raw) return emptyData();
+      const data = migrate(JSON.parse(raw));
+      this.saveData(data);
+      return data;
     } catch {
-      return buildEmptyData();
+      return emptyData();
     }
   }
 
   saveData(data: AppData): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch { /* storage quota exceeded — ignore */ }
+    } catch { /* cuota de almacenamiento excedida — se ignora */ }
   }
 
   getUserByEmail(email: string): User | undefined {
@@ -71,8 +84,8 @@ class LocalStorageService implements IStorageService {
     return this.getData().usuarios.find(u => u.id === id);
   }
 
-  getProjectByClientId(clientId: string): Proyecto | undefined {
-    return this.getData().proyectos.find(p => p.cliente_id === clientId);
+  getProjectByOwnerId(ownerId: string): Proyecto | undefined {
+    return this.getData().proyectos.find(p => p.propietario_id === ownerId);
   }
 }
 

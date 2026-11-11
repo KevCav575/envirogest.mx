@@ -1,4 +1,8 @@
-export type UserRole = 'admin' | 'consultor' | 'cliente';
+/**
+ * Modelo de autogestión: cada empresa opera su propio espacio de trabajo.
+ * `propietario` tiene control total sobre la cuenta, la empresa y sus datos.
+ */
+export type UserRole = 'propietario';
 
 export interface User {
   id: string;
@@ -9,7 +13,8 @@ export interface User {
   pwd_hash?: string;
   rol: UserRole;
   giro?: string;
-  proyecto_id?: string;
+  /** Espacio de trabajo de la empresa. */
+  proyecto_id: string;
 }
 
 export interface Hito {
@@ -58,7 +63,7 @@ export interface Tramite {
   notas2: Nota[];
 }
 
-export type AlertaTipo = 'vencimiento' | 'solicitud' | 'firma' | 'visita' | 'estado' | 'info';
+export type AlertaTipo = 'vencimiento' | 'estado' | 'info';
 
 export interface Alerta {
   id: string;
@@ -67,14 +72,6 @@ export interface Alerta {
   fecha: string;
   leido: boolean;
   tramite_id: string | null;
-}
-
-export interface Instruccion {
-  id: string;
-  texto: string;
-  urgente: boolean;
-  fecha: string;
-  leido: boolean;
 }
 
 export interface Reunion {
@@ -111,12 +108,11 @@ export interface Cuestionario {
 
 export interface Proyecto {
   id: string;
-  cliente_id: string;
-  consultor_id: string | null;
+  /** Cuenta propietaria de la empresa. */
+  propietario_id: string;
   cuestionario: Cuestionario;
   tramites: Tramite[];
   alertas: Alerta[];
-  instrucciones_admin: Instruccion[];
   reuniones: Reunion[];
   iso14001: ISO14001;
   creado: string;
