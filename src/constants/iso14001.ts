@@ -1,6 +1,10 @@
 export interface ISOItem {
   id: string;
   texto: string;
+  /** Cómo se relacionan los trámites con este requisito. */
+  vinculo?: string;
+  /** Si es true, todos los trámites aplicables cuentan como evidencia. */
+  todos?: boolean;
 }
 
 export interface ISOSeccion {
@@ -29,10 +33,10 @@ export const ISO_DATA: Record<string, ISOSeccion> = {
   '6': {
     nombre: 'Planificación',
     items: [
-      { id: '6.1.1', texto: '6.1.1 Riesgos y oportunidades identificados' },
-      { id: '6.1.2', texto: '6.1.2 Aspectos ambientales significativos determinados' },
-      { id: '6.1.3', texto: '6.1.3 Requisitos legales identificados y evaluados' },
-      { id: '6.1.4', texto: '6.1.4 Acciones planificadas para cumplir requisitos' },
+      { id: '6.1.1', texto: '6.1.1 Riesgos y oportunidades identificados', vinculo: 'Trámites que documentan riesgos de la operación.' },
+      { id: '6.1.2', texto: '6.1.2 Aspectos ambientales significativos determinados', vinculo: 'Trámites ligados a tus emisiones, descargas, residuos e impactos.' },
+      { id: '6.1.3', texto: '6.1.3 Requisitos legales identificados y evaluados', todos: true, vinculo: 'Cada trámite del diagnóstico es una obligación legal identificada.' },
+      { id: '6.1.4', texto: '6.1.4 Acciones planificadas para cumplir requisitos', todos: true, vinculo: 'Los pasos y fechas de cada trámite son tu plan de acción.' },
       { id: '6.2',   texto: '6.2 Objetivos ambientales con planes de acción' },
     ],
   },
@@ -43,21 +47,21 @@ export const ISO_DATA: Record<string, ISOSeccion> = {
       { id: '7.2', texto: '7.2 Competencia del personal determinada y documentada' },
       { id: '7.3', texto: '7.3 Toma de conciencia sobre política y aspectos ambientales' },
       { id: '7.4', texto: '7.4 Comunicación interna y externa establecida' },
-      { id: '7.5', texto: '7.5 Información documentada controlada' },
+      { id: '7.5', texto: '7.5 Información documentada controlada', todos: true, vinculo: 'Los documentos anexados a cada trámite son información documentada.' },
     ],
   },
   '8': {
     nombre: 'Operación',
     items: [
-      { id: '8.1', texto: '8.1 Planificación y control operacional implementados' },
-      { id: '8.2', texto: '8.2 Preparación y respuesta ante emergencias' },
+      { id: '8.1', texto: '8.1 Planificación y control operacional implementados', vinculo: 'Licencias, permisos y planes de manejo que regulan la operación.' },
+      { id: '8.2', texto: '8.2 Preparación y respuesta ante emergencias', vinculo: 'Estudios de riesgo y programas de prevención de accidentes.' },
     ],
   },
   '9': {
     nombre: 'Evaluación del desempeño',
     items: [
-      { id: '9.1.1', texto: '9.1.1 Seguimiento, medición y análisis definidos' },
-      { id: '9.1.2', texto: '9.1.2 Evaluación del cumplimiento legal' },
+      { id: '9.1.1', texto: '9.1.1 Seguimiento, medición y análisis definidos', vinculo: 'Reportes y muestreos periódicos (emisiones, agua, GEI).' },
+      { id: '9.1.2', texto: '9.1.2 Evaluación del cumplimiento legal', todos: true, vinculo: 'El estado de cada trámite muestra si cumples o no.' },
       { id: '9.2',   texto: '9.2 Auditoría interna programada y ejecutada' },
       { id: '9.3',   texto: '9.3 Revisión por la dirección documentada' },
     ],
@@ -71,3 +75,4 @@ export const ISO_DATA: Record<string, ISOSeccion> = {
     ],
   },
 };
+

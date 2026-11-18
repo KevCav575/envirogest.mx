@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Badge } from '@/components/ui/Badge';
-import { ESTADOS } from '@/constants/estados';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtDate } from '@/lib/utils';
 import { ymd } from '@/lib/events';
+import { docsResumen, progreso } from '@/lib/tramites';
 import type { Tramite, TramiteEstado } from '@/types';
 
 type LevelFilter = 'todos' | 'federal' | 'estatal' | 'municipal';
@@ -135,7 +135,6 @@ export default function TramitesPage() {
             {rows.length === 0 ? (
               <tr><td colSpan={7} className="py-16 text-center text-stone-500">Ningún trámite coincide con los filtros.</td></tr>
             ) : rows.map(t => {
-              const e = ESTADOS[t.estado] ?? ESTADOS.no_iniciado;
               const pill = PILL[t.estado] ?? PILL.no_iniciado;
               return (
                 <tr key={t._id} onClick={() => navigate(`/proyecto/${projectId}/tramites/${t._id}`)}
@@ -150,7 +149,10 @@ export default function TramitesPage() {
                   </td>
                   <td className="text-stone-400 tracking-[0.2em]" aria-hidden="true">-----</td>
                   <td className="pr-4" style={{ color: deadlineColor(t) }}>{t.fecha_limite ? fmtDate(t.fecha_limite) : '—'}</td>
-                  <td className="pr-4 text-ink">{e.pct}%</td>
+                  <td className="pr-4">
+                    <span className="block text-ink">{progreso(t).pct}%</span>
+                    <span className="block text-[11px] text-stone-400">{docsResumen(t).listos}/{docsResumen(t).total} docs</span>
+                  </td>
                   <td className="pr-3"><Badge label={pill.label} color={pill.color} bg={pill.bg} /></td>
                 </tr>
               );

@@ -47,7 +47,7 @@ function statusTag(e: CalEvent, tramites: Tramite[]) {
   if (e.kind === 'hito') return 'Pendiente';
   if (e.kind === 'reunion') return e.date < ymd(new Date()) ? 'Pasada' : 'Agendada';
   const t = tramites.find(x => x._id === e.tramiteId);
-  return t ? (ESTADOS[t.estado]?.label.split(' ')[0] ?? '') : '';
+  return t ? (ESTADOS[t.estado]?.corto ?? '') : '';
 }
 
 /* ───────────────────────── Tarjeta de evento ───────────────────────── */

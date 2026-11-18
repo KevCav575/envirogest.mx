@@ -3,7 +3,9 @@ import { Outlet, useParams, Navigate, useLocation } from 'react-router-dom';
 import { TopNav, type NavItem } from '@/components/TopNav';
 import { UpgradeCard } from '@/components/UpgradeCard';
 import { useAppStore } from '@/store/useAppStore';
-import { today, uid } from '@/lib/utils';
+import { today } from '@/lib/utils';
+import { ymd } from '@/lib/events';
+import { estadoCalculado } from '@/lib/tramites';
 
 export default function WorkspaceLayout() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -45,7 +47,18 @@ export default function WorkspaceLayout() {
         }
       }
     });
-    if (newAlerts.length) updateProject({ alertas: [...proj.alertas, ...newAlerts] });
+    // El estado se deriva del avance; aquí se detectan los que vencieron desde la última visita
+    const hoy = ymd(new Date());
+    let estadosCambiaron = false;
+    const tramites = proj.tramites.map(t => {
+      const estado = estadoCalculado(t, hoy);
+      if (estado === t.estado) return t;
+      estadosCambiaron = true;
+      return { ...t, estado };
+    });
+    if (newAlerts.length || estadosCambiaron) {
+      updateProject({ alertas: [...proj.alertas, ...newAlerts], tramites });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 

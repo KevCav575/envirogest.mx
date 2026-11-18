@@ -59,8 +59,21 @@ export interface Tramite {
   estado: TramiteEstado;
   fecha_limite: string | null;
   cronograma: Cronograma;
-  documentos: string[];
+  /** Pasos del catálogo marcados como hechos (ids). */
+  pasos_hechos: string[];
+  /** Archivos anexados; el contenido vive en IndexedDB (files.service). */
+  anexos: Anexo[];
   notas2: Nota[];
+}
+
+export interface Anexo {
+  id: string;
+  /** Documento del catálogo al que responde, o 'otro'. */
+  doc_id: string;
+  nombre: string;
+  tipo: string;
+  tamano: number;
+  fecha: string;
 }
 
 export type AlertaTipo = 'vencimiento' | 'estado' | 'info';

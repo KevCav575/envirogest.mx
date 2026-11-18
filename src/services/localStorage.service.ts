@@ -10,6 +10,7 @@
 import type { AppData, Proyecto, User } from '@/types';
 import type { IStorageService } from './storage.interface';
 import { uid } from '@/lib/utils';
+import { pasosHastaEstado } from '@/lib/tramites';
 
 const STORAGE_KEY = 'envirogest_v2';
 
@@ -33,7 +34,8 @@ const TIPOS_ALERTA = new Set(['vencimiento', 'estado', 'info']);
  *  - descarta cuentas 'admin' y 'consultor',
  *  - convierte 'cliente' en 'propietario',
  *  - renombra cliente_id → propietario_id y quita consultor_id / instrucciones_admin,
- *  - convierte alertas enviadas por consultores en avisos genéricos.
+ *  - convierte alertas enviadas por consultores en avisos genéricos,
+ *  - agrega pasos hechos y anexos a trámites que solo tenían estado manual.
  */
 function migrate(raw: { usuarios?: LegacyUser[]; proyectos?: LegacyProyecto[] }): AppData {
   const proyectos: Proyecto[] = (raw.proyectos ?? []).map(p => {
@@ -42,6 +44,15 @@ function migrate(raw: { usuarios?: LegacyUser[]; proyectos?: LegacyProyecto[] })
       ...rest,
       propietario_id: p.propietario_id ?? cliente_id ?? '',
       reuniones: rest.reuniones ?? [],
+      tramites: (rest.tramites ?? []).map(t => {
+        // Antes: `documentos: string[]` sin uso y estado elegido a mano.
+        const { documentos: _d, ...tr } = t as typeof t & { documentos?: unknown };
+        return {
+          ...tr,
+          anexos: tr.anexos ?? [],
+          pasos_hechos: tr.pasos_hechos ?? pasosHastaEstado(tr.id, tr.estado),
+        };
+      }),
       alertas: (rest.alertas ?? []).map(a => (TIPOS_ALERTA.has(a.tipo) ? a : { ...a, tipo: 'info' as const })),
     };
   });

@@ -18,18 +18,29 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function generateTramites(resp: CuestionarioRespuestas): Tramite[] {
+/**
+ * Arma la lista de trámites que aplican según el diagnóstico.
+ * Si se pasa la lista actual, conserva el avance (pasos, anexos, fechas, notas)
+ * de los trámites que siguen aplicando.
+ */
+export function generateTramites(resp: CuestionarioRespuestas, actuales: Tramite[] = []): Tramite[] {
   return TRAMITES_CATALOG
-    .filter(t => t.condicion(resp))
-    .map(t => ({
-      ...t,
-      _id: uid(),
-      estado: 'no_iniciado' as const,
-      fecha_limite: null,
-      cronograma: { inicio: null, fin: null, hitos: [], notas: '', dependencias: [] },
-      documentos: [],
-      notas2: [],
-    }));
+    .filter(c => c.condicion(resp))
+    .map(c => {
+      const previo = actuales.find(t => t.id === c.id);
+      if (previo) return previo;
+      return {
+        _id: uid(),
+        id: c.id, nombre: c.nombre, autoridad: c.autoridad, nivel: c.nivel,
+        base_legal: c.base_legal, descripcion: c.descripcion,
+        estado: 'no_iniciado' as const,
+        fecha_limite: null,
+        cronograma: { inicio: null, fin: null, hitos: [], notas: '', dependencias: [] },
+        pasos_hechos: [],
+        anexos: [],
+        notas2: [],
+      };
+    });
 }
 
 export function makeGCalLink(

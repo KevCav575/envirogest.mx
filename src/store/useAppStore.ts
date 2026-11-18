@@ -4,6 +4,7 @@ import { storageService } from '@/services/localStorage.service';
 import { authService } from '@/services/auth.service';
 import type { AuthUser } from '@/services/auth.service';
 import { uid, today } from '@/lib/utils';
+import { filesService } from '@/services/files.service';
 
 /**
  * Modo de autenticación.
@@ -58,6 +59,12 @@ type LocalUser = User & { _pwd?: string };
 
 function persist(data: AppData): void {
   storageService.saveData(data);
+}
+
+/** Borra de IndexedDB los archivos anexados a un espacio de trabajo. */
+function dropFiles(proj: Proyecto | undefined): void {
+  const ids = (proj?.tramites ?? []).flatMap(t => (t.anexos ?? []).map(a => a.id));
+  filesService.remove(ids).catch(() => { /* IndexedDB no disponible */ });
 }
 
 function toUser(a: AuthUser): User {
@@ -258,6 +265,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   resetWorkspace() {
     const { data, currentUser } = get();
     if (!currentUser) return;
+    dropFiles(data.proyectos.find(p => p.id === currentUser.proyecto_id));
     const updated: AppData = {
       ...data,
       proyectos: data.proyectos.map(p => {
@@ -280,6 +288,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const me = (data.usuarios as LocalUser[]).find(u => u.id === currentUser.id);
       if (!me || me._pwd !== password) return 'Contraseña incorrecta.';
     }
+    dropFiles(data.proyectos.find(p => p.id === currentUser.proyecto_id));
     const updated: AppData = {
       usuarios: data.usuarios.filter(u => u.id !== currentUser.id),
       proyectos: data.proyectos.filter(p => p.id !== currentUser.proyecto_id),

@@ -5,6 +5,7 @@ import { Btn } from '@/components/ui/Btn';
 import { GIROS } from '@/constants/giros';
 import { useAppStore } from '@/store/useAppStore';
 import { generateTramites, today, uid } from '@/lib/utils';
+import { filesService } from '@/services/files.service';
 import type { CuestionarioRespuestas } from '@/types';
 
 const Q_STEPS = [
@@ -37,8 +38,13 @@ export default function QuestionnairePage() {
   const canNext = cur.tipo === 'select' ? !!resp.giro : cur.tipo === 'yesno' ? yesnoValue !== null : true;
 
   const finish = () => {
-    const tramites = generateTramites(resp);
-    const alertas  = [...(proj?.alertas ?? []), { id: uid(), tipo: 'info' as const, mensaje: `Diagnóstico completado. Se identificaron ${tramites.length} trámites aplicables.`, fecha: today(), leido: false, tramite_id: null }];
+    const actuales = proj?.tramites ?? [];
+    const tramites = generateTramites(resp, actuales);
+    // Trámites que dejaron de aplicar: se quitan junto con sus archivos
+    const quitados = actuales.filter(t => !tramites.some(n => n._id === t._id));
+    filesService.remove(quitados.flatMap(t => (t.anexos ?? []).map(a => a.id))).catch(() => { /* sin IndexedDB */ });
+    const detalle = quitados.length ? ` Ya no aplican: ${quitados.map(t => t.nombre).join(', ')}.` : '';
+    const alertas  = [...(proj?.alertas ?? []), { id: uid(), tipo: 'info' as const, mensaje: `Diagnóstico completado. Se identificaron ${tramites.length} trámites aplicables.${detalle}`, fecha: today(), leido: false, tramite_id: null }];
     updateProject({ cuestionario: { respondido: true, respuestas: resp, fecha: today() }, tramites, alertas });
     setDone(true);
   };
@@ -51,8 +57,8 @@ export default function QuestionnairePage() {
           Te aplican {proj?.tramites.length ?? 0} trámites ambientales
         </h1>
         <p className="text-stone-600 mt-3 max-w-[560px]">
-          Ya están en tu lista de trámites, ordenados por autoridad. Puedes repetir el diagnóstico
-          si cambió algo en tu operación; la lista se vuelve a generar.
+          Ya están en tu lista de trámites. Si algo cambia en tu operación, repite el diagnóstico:
+          los trámites que sigan aplicando conservan su avance y sus documentos.
         </p>
         <div className="flex flex-wrap gap-3 mt-8">
           <Btn size="lg" onClick={() => navigate(`/proyecto/${projectId}/tramites`)}>VER TRÁMITES</Btn>
